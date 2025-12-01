@@ -1,0 +1,453 @@
+---
+title: "Space Markers in the Synoptic Gospels"
+subtitle: "An Annotated Data Set"
+author: Timo Glaser, Marburg University
+date: 07/07/2025
+date-format: long
+format: html
+toc: TRUE
+toc-depth: 6
+editor: visual
+---
+
+## Loading the Libraries
+
+```{r}
+#| output: false
+library(hrbrthemes)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(geomtextpath)
+library(ggridges)
+library(ggsci)
+```
+
+## Spatial Density
+
+This function takes the file with the extracted temporal markers of each book as an argument. (The files were created with Jupyter Python Notebook "SpatialMarkersDataFrame.ipynb".) It returns a table for each book with statistics on the number of words, the number of space markers and the percentage for each chapter.
+
+```{r}
+spaceMarks <- function(filename) {
+  f = paste0("../2_data_annotated/SBLGNT/", filename) 
+  b_df <- read_tsv(f) #open the book_spatials.tsv
+  # calculate number of spatials per chap (absolute number)
+  #t_df = count(b_df, wt=chap, name = "temp_words")
+  t_df = b_df %>% count(chap)
+  #create new tibble with 2 cols (chap & total_words), 
+  #reduce to 1 row per chapter
+  #join with spatials per chap-df
+  df = tibble(book = b_df$book, chap = b_df$chap, total_words = b_df$total_words) %>% 
+    distinct() %>% right_join(t_df, by = "chap") %>% 
+    mutate(perc = n/total_words*100)
+  return(df)
+}
+
+mt_dens <- spaceMarks("Mt_spatials.tsv")
+mk_dens <- spaceMarks("Mk_spatials.tsv")
+lk_dens <- spaceMarks("Lk_spatials.tsv")
+john_dens <- spaceMarks("Joh_spatials.tsv")
+acts_dens <- spaceMarks("acts_spatials.tsv")
+```
+
+```{r}
+head(mt_dens)
+```
+
+```{r}
+a <- sum(acts_dens$n)/sum(acts_dens$total_words)* 100
+l <- sum(lk_dens$n)/sum(lk_dens$total_words)* 100
+m0 <- sum(mk_dens$n)/sum(mk_dens$total_words)* 100
+m1 <- sum(mt_dens$n)/sum(mt_dens$total_words)* 100
+j <- sum(john_dens$n)/sum(john_dens$total_words)* 100
+density_data <- data.frame(
+  book=c("Luke","Mark","Matt", "Acts", "John") ,  
+  value=c(l, m0, m1, a, j)
+  )
+print(density_data)
+```
+
+Contrary to a first reading impression, the density of spatial markers is slightly lower in Lk. Maybe this is due to the ample variety of spatial markers, ranging from specific toponyms to unspecific markers like verbs and indeclinables.
+
+### Violin plot
+
+```{r}
+all_dens <- bind_rows(mk_dens, mt_dens, lk_dens, acts_dens, john_dens)
+```
+
+```{r}
+ggplot(all_dens, aes(x=book, y=perc, fill=book)) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica') +
+  geom_violin(aes(x = factor(book, c("Mark", "Matt", "Luke", "Acts", "John")))) +
+  stat_summary(fun = "mean",geom = "crossbar", width = 0.5, colour = "white")+
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "none",
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10),
+    axis.title = element_text(hjust=1)
+    )+
+  labs(#title = "Spatial Markers Percentages",
+    y = "Spatial Markers per Chapter", x = NULL)+
+  scale_y_continuous(labels = scales::label_percent(scale = 1, accuracy = 1))
+
+ggsave("../3_visuals/gspl_violin_spatials.png")
+```
+
+## Distribution over the Narrative
+
+### Totals
+
+```{r}
+all_dens %>% filter(book == "Matt" | book == "Mark" | book == "Luke") %>% 
+  ggplot(aes(x = chap, y = perc, colour = book)) + geom_point(size=3) +
+    theme_ipsum() +
+  labs(
+    #title = "Spatial Markers",
+    y = "Spatial Markers per Chapter", 
+    x = "Chapter" )+ #element_blank()) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale=1))+
+  #ylim(0,5) +
+  geom_line(linewidth = 1,alpha = 0.7) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica'
+  ) +
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  geom_labelsmooth(aes(label = book), fill = "white",
+                method = "lm", formula = y ~ x,
+                size = 3, linewidth = 1, 
+                boxlinewidth = 0.4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(size = 10, 
+                               margin = margin(5,0,0,0, "pt")),
+    axis.title = element_text(hjust=1), legend.position = "none")
+ggsave("../3_visuals/gspl_trend_spatials.png")
+```
+
+The means of the percentages of Mark and Matthew are slightly higher than Luke:
+
+```{r}
+print(mean(mk_dens$perc))
+print(mean(mt_dens$perc))
+print(mean(lk_dens$perc))
+print(mean(acts_dens$perc))
+print(mean(john_dens$perc))
+```
+
+The interquartile range (IQR) to measure the spread:
+
+```{r}
+print(IQR(mk_dens$perc))
+print(IQR(mt_dens$perc))
+print(IQR(lk_dens$perc))
+print(IQR(acts_dens$perc))
+print(IQR(john_dens$perc))
+```
+
+```{r}
+print(sd(mk_dens$perc))
+print(sd(mt_dens$perc))
+print(sd(lk_dens$perc))
+print(sd(acts_dens$perc))
+print(sd(john_dens$perc))
+```
+
+### Specifics
+
+Next, we focus on the distribution of some of the space markers over the story time
+
+```{r}
+spaceChapDistrib <- function(filename,categry) {
+  f = paste0("../2_data_annotated/SBLGNT/", filename) 
+  b_df <- read_tsv(f) #open the book_spatials.tsv
+  b_df %>% distinct(chap, total_words) -> words_per_chap 
+  b_df %>% filter(Category %in% categry) %>% 
+    group_by(chap) %>% 
+    count(book, chap) -> df 
+  df <- left_join(df, words_per_chap, by = "chap")
+  #print(words_per_chap)
+  df$space <- categry 
+  b_df %>% distinct(chap, total_words) %>% 
+    summarize(sum_ncases = sum(total_words)) -> totalNumberTokens
+  df %>% mutate(chap_perc = n/total_words*100) -> df #relative to words per chapter
+  df$per100k <- 100000*(df$n/totalNumberTokens$sum_ncases) #occurrences per 100.000 words
+  return(df)
+}
+```
+
+#### Verbs of Motion
+
+```{r}
+#| output: false
+#| echo: false
+
+mk_vom <- spaceChapDistrib("Mk_spatials.tsv", "vbs. of motion")
+lk_vom <- spaceChapDistrib("Lk_spatials.tsv", "vbs. of motion")
+mt_vom <- spaceChapDistrib("Mt_spatials.tsv", "vbs. of motion")
+df_vom <- bind_rows(mt_vom, mk_vom, lk_vom)
+```
+
+```{r}
+head(df_vom)
+```
+
+```{r plotting vom}
+ggplot(df_vom, aes(x = chap, y = chap_perc, colour = book)) + geom_point(size=3) +
+    theme_ipsum() +
+  labs(
+    #title = "Verbs of Motion",
+    y = "Spatial Markers per Chapter", 
+    x = "Chapter" )+ #element_blank()) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale=1))+
+  #ylim(0,5) +
+  geom_line(linewidth = 1,alpha = 0.7) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica'
+  ) +
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  geom_labelsmooth(aes(label = book), fill = "white",
+                method = "lm", formula = y ~ x,
+                size = 3, linewidth = 1, 
+                boxlinewidth = 0.4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(size = 10, 
+                               margin = margin(5,0,0,0, "pt")),
+    axis.title = element_text(hjust=1), legend.position = "none")
+ggsave("../3_visuals/gspl_trend_vom.png")
+```
+
+#### Toponyms
+
+```{r}
+#| output: false
+#| echo: false
+
+mk_tn <- spaceChapDistrib("Mk_spatials.tsv", "toponym")
+lk_tn <- spaceChapDistrib("Lk_spatials.tsv", "toponym")
+mt_tn <- spaceChapDistrib("Mt_spatials.tsv", "toponym")
+df_tn <- bind_rows(mt_tn, mk_tn, lk_tn)
+```
+
+```{r}
+head(df_tn)
+```
+
+Calculating the density of toponyms:
+
+```{r}
+lt <- sum(lk_tn$n)/sum(lk_tn$total_words)* 100
+m0t <- sum(mk_tn$n)/sum(mk_tn$total_words)* 100
+m1t <- sum(mt_tn$n)/sum(mt_tn$total_words)* 100
+density_data_t <- data.frame(
+  book=c("Luke","Mark","Matt") ,  
+  value=c(lt, m0t, m1t)
+  )
+print(density_data_t)
+```
+
+```{r}
+ggplot(df_tn, aes(x = chap, y = chap_perc, colour = book)) + geom_point(size=3) +
+    theme_ipsum() +
+  labs(
+    #title = "Toponyms",
+    y = "Spatial Markers per Chapter", 
+    x = "Chapter" )+ #element_blank()) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale=1),
+    limits = c(0,5)) +
+  #ylim(0,5) +
+  geom_line(linewidth = 1, alpha = 0.5) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica'
+  ) +
+  geom_labelsmooth(aes(label = book), fill = "white",
+                method = "lm", formula = y ~ x,
+                size = 3, linewidth = 1, boxlinewidth = 0.4) +
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  #scale_color_manual(values=c('#693668', '#DE7C5A', '#53A2BE')) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(size = 10, 
+                               margin = margin(5,0,0,0, "pt")),
+    axis.title = element_text(hjust=1), legend.position = "none")
+ggsave("../3_visuals/gspl_trend_toponyms.png")
+  
+```
+
+#### Community
+
+```{r}
+#| output: false
+#| echo: false
+
+mk_com_dis <- spaceChapDistrib("Mk_spatials.tsv", "community")
+lk_com_dis <- spaceChapDistrib("Lk_spatials.tsv", "community")
+mt_com_dis <- spaceChapDistrib("Mt_spatials.tsv", "community")
+df_com_dis <- bind_rows(mt_com_dis, mk_com_dis, lk_com_dis)
+```
+
+```{r}
+ggplot(df_com_dis, aes(x = chap, y = chap_perc, colour = book)) + geom_point(size=3) +
+    theme_ipsum() +
+  labs(#title = "Community",
+      y = "Spatial Markers per Chapter", 
+      x = "Chapter" )+ #element_blank()) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale=1),
+    limits = c(0,3)) +
+  #ylim(0,5) +
+  geom_line(linewidth = 1, alpha = 0.5) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica'
+  ) +
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  geom_labelsmooth(aes(label = book), fill = "white",
+                method = "lm", formula = y ~ x,
+                size = 3, linewidth = 1, boxlinewidth = 0.4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(size = 10, 
+                               margin = margin(5,0,0,0, "pt")),
+    axis.title = element_text(hjust=1), legend.position = "none")
+  
+```
+
+#### Architecture
+
+```{r}
+mk_arch <- spaceChapDistrib("Mk_spatials.tsv", "buildings")
+lk_arch <- spaceChapDistrib("Lk_spatials.tsv", "buildings")
+mt_arch <- spaceChapDistrib("Mt_spatials.tsv", "buildings")
+df_arch <- bind_rows(mt_arch, mk_arch, lk_arch)
+```
+
+```{r}
+ggplot(df_arch, aes(x = chap, y = chap_perc, colour = book)) + geom_point(size=3) +
+    theme_ipsum() +
+  labs(#title = "Buildings",
+      y = "Spatial Markers per Chapter", 
+      x = "Chapter" )+ #element_blank()) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale=1),
+    limits = c(0,3)) +
+  #ylim(0,5) +
+  geom_line(linewidth = 1, alpha = 0.5) +
+  geom_labelsmooth(aes(label = book), fill = "white",
+                method = "lm", formula = y ~ x,
+                size = 3, linewidth = 1, boxlinewidth = 0.4) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica'
+  ) +
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(size = 10, 
+                               margin = margin(5,0,0,0, "pt")),
+    axis.title = element_text(hjust=1), legend.position = "none")
+ggsave("../3_visuals/gspl_trend_buildings.png")
+```
+
+#### Nature
+
+```{r}
+#| output: false
+#| echo: false
+
+mk_nature <- spaceChapDistrib("Mk_spatials.tsv", "nature")
+lk_nature <- spaceChapDistrib("Lk_spatials.tsv", "nature")
+mt_nature <- spaceChapDistrib("Mt_spatials.tsv", "nature")
+df_nature <- bind_rows(mt_nature, mk_nature, lk_nature)
+#print(mk_nature)
+```
+
+```{r}
+ggplot(df_nature, aes(x = chap, y = chap_perc, colour = book)) + geom_point(size=3) +
+    theme_ipsum() +
+  labs(#title = "Nature",
+      y = "Spatial Markers per Chapter", 
+      x = "Chapter" )+ #element_blank()) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale=1),
+    limits = c(0,5)) +
+  #ylim(0,5) +
+  geom_line(linewidth = 1) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica'
+  ) +
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  geom_labelsmooth(aes(label = book), fill = "white",
+                method = "lm", formula = y ~ x,
+                size = 3, linewidth = 1, boxlinewidth = 0.4) +
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(size = 10, 
+                               margin = margin(5,0,0,0, "pt")),
+    axis.title = element_text(hjust=1), legend.position = "none")
+```
+
+#### Indeclinables
+
+```{r}
+#| output: false
+#| echo: false
+
+mk_ind <- spaceChapDistrib("Mk_spatials.tsv", "indeclinable")
+lk_ind <- spaceChapDistrib("Lk_spatials.tsv", "indeclinable")
+mt_ind <- spaceChapDistrib("Mt_spatials.tsv", "indeclinable")
+df_ind <- bind_rows(mt_vom, mk_vom, lk_vom)
+```
+
+```{r}
+ggplot(df_ind, aes(x = chap, y = chap_perc, colour = book)) + geom_point(size=3) +
+    theme_ipsum() +
+  labs(#title = "Indeclinables",
+      y = "Spatial Markers per Chapter", 
+      x = "Chapter" )+ #element_blank()) +
+  scale_y_continuous(
+    labels = scales::label_percent(scale=1),
+    limits = c(0,8)) +
+  #ylim(0,5) +
+  geom_line(linewidth = 1, alpha = 0.5) +
+  geom_labelsmooth(aes(label = book), fill = "white",
+                method = "lm", formula = y ~ x,
+                size = 3, linewidth = 1, boxlinewidth = 0.4) +
+  theme_minimal(
+    base_size = 10, 
+    base_family = 'Helvetica'
+  ) +
+  scale_color_uchicago()+
+  scale_fill_uchicago()+
+  theme(
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 10), 
+    axis.text.x = element_text(size = 10, 
+                               margin = margin(5,0,0,0, "pt")),
+    axis.title = element_text(hjust=1), legend.position = "none")
+ggsave("../3_visuals/gspl_trend_indeclinables.png")
+```
